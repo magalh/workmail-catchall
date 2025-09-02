@@ -1,0 +1,48 @@
+{
+  "Records": [
+    {
+      "eventSource": "aws:ses",
+      "eventVersion": "1.0",
+      "ses": {
+        "mail": {
+          "timestamp": "2025-09-02T12:34:56.789Z",
+          "source": "sender@example.com",
+          "messageId": "test-message-id-123456",
+          "destination": [
+            "random@yourdomain.com"
+          ],
+          "headers": [
+            {
+              "name": "From",
+              "value": "Sender Name <sender@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "random@yourdomain.com"
+            },
+            {
+              "name": "Subject",
+              "value": "Test Subject"
+            }
+          ]
+        },
+        "receipt": {
+          "recipients": [
+            "random@yourdomain.com"
+          ],
+          "spamVerdict": { "status": "PASS" },
+          "virusVerdict": { "status": "PASS" },
+          "spfVerdict":   { "status": "PASS" },
+          "dkimVerdict":  { "status": "PASS" },
+          "dmarcVerdict": { "status": "PASS" },
+          "processingTimeMillis": 1000,
+          "action": {
+            "type": "S3",
+            "bucketName": "ses-inbound-bucket-example",
+            "objectKey": "test-message-id-123456"
+          }
+        }
+      }
+    }
+  ]
+}

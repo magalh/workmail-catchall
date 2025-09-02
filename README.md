@@ -28,10 +28,8 @@ Incoming email to *@example.com
 ▼
 Amazon SES (Receipt Rule)
 
-S3 action → saves raw MIME to s3://ses-inbound-bucket-example/<messageId>
-
-Lambda → rewrites headers safely and forwards with SES SendRawEmail
-
+S3 action → saves raw MIME to s3://`ses-inbound-bucket-example`/<messageId>\
+Lambda → rewrites headers safely and forwards with SES SendRawEmail\
 WorkMail → (optional) also deliver to catchall@example.com
 
 Why S3?
@@ -50,53 +48,56 @@ Why S3?
 ---
 
 ## WorkMail Setup
-Create an Amazon WorkMail organization (if you don’t have one)
+Create an Amazon WorkMail organization (if you don’t have one)\
 Create a user, e.g., catchall@example.com
 
 ## S3 Setup
 Go to S3 → Create Bucket
-- Name: ses-inbound-bucket-example
+- Name: `ses-inbound-bucket-example`
 - Region: Same as SES email receiving region
+
 Add bucket policy to allow SES + Lambda access
-- Use policies/s3-bucket-policy-ses-put.json
-- Optionally also add policies/s3-bucket-policy-lambda-read.json
+- Use **policies/s3-bucket-policy-ses-put.json**
+- also add **policies/s3-bucket-policy-lambda-read.json**
+
 (Optional) Add lifecycle rule to auto-delete emails after N days
 
 ## Lambda Setup
 Create a new Lambda function:
-- Name: ses-catchall-forwarder
+- Name: `ses-catchall-forwarder`
 - Runtime: Python 3.11 or newer
+- Paste in **lambda/lambda_function.py** code
 
 Set environment variables:
-- SES_S3_BUCKET = ses-inbound-bucket-example
+- SES_S3_BUCKET = `ses-inbound-bucket-example`
 - (optional) SES_S3_PREFIX = (empty unless using prefixes)
 
-Paste in lambda/lambda_function.py code
 Attach IAM role lambda-ses-catchall-role with:
 - policies/lambda-exec-inline.json
 - policies/lambda-exec-trust.json
 
 ## SES Setup
-Go to SES → Configuration → Email Receiving
+Go to SES → Configuration → Email Receiving\
 Create or edit a receipt rule:
 - Recipients: *@example.com
 - Add actions (in order):
-- - S3 — store to ses-inbound-bucket-example
-- - Lambda — call ses-catchall-forwarder
+- - S3 — store to `ses-inbound-bucket-example`
+- - Lambda — call `ses-catchall-forwarder`
 - - WorkMail — optionally also deliver to catchall@example.com
+
 Enable the rule set (if not already active)
 
 ## Lambda behavior
 
-- Forwards **all recipients** at `example.com` to `catchall@example.com`.
+- Forwards **all recipients** at example.com to catchall@example.com.
 - **Skips forwarding** when:
-  - Destination is already `catchall@example.com` (prevents loops).
-  - Sender equals `admin@example.awsapps.com` (technical forwarder identity).
-  - Sender is in `IGNORE_EMAILS`.
-- **MIME-safe** header rewrite using Python’s `email` library:
-  - Sets `From: "<original_sender> <admin@example.awsapps.com>"`
-  - Sets/overwrites `Reply-To: <original_sender>`
-  - Removes transport/auth headers: `Return-Path`, `DKIM-Signature`, `X-SES-*`, etc.
+  - Destination is already catchall@example.com (prevents loops).
+  - Sender equals admin@example.awsapps.com (technical forwarder identity).
+  - Sender is in IGNORE_EMAILS.
+- **MIME-safe** header rewrite using Python’s email library:
+  - Sets From: "<original_sender> <admin@example.awsapps.com>"
+  - Sets/overwrites Reply-To: <original_sender>
+  - Removes transport/auth headers: Return-Path, DKIM-Signature, X-SES-*, etc.
 
 ---
 
@@ -106,6 +107,21 @@ Enable the rule set (if not already active)
   Expect delivery to `catchall@example.com`.
 - **Manual Lambda test event**: use `examples/ses-event-test.json` (matches SES→Lambda structure).  
   The function will try to fetch the raw MIME from S3 using `mail.messageId`.
+
+---
+
+## Debug
+
+If emails aren't forwarding or you need to troubleshoot:
+
+**Access Lambda logs**:
+- Go to **AWS Lambda** → `ses-catchall-forwarder` function
+- Click **Monitor** tab → **View CloudWatch logs**
+- Or go directly to **CloudWatch** → **Log groups** → `/aws/lambda/ses-catchall-forwarder`
+
+**Check S3 bucket**:
+- Verify emails are being stored in `ses-inbound-bucket-example`
+- Each email creates an object with the SES message ID
 
 ---
 
@@ -121,6 +137,20 @@ Enable the rule set (if not already active)
 - Bucket policy grants `ses.amazonaws.com` **PutObject** limited by your **account ID**.
 - Lambda role only needs `s3:GetObject` (and maybe `s3:ListBucket`) for that bucket and `ses:SendRawEmail`.
 - If S3 uses **SSE-KMS**, grant `kms:Decrypt` to the Lambda role and include the role in the KMS key policy.
+
+---
+
+## Final Thoughts
+
+This solution fills a surprising gap in AWS WorkMail's feature set. Catch-all email forwarding is such a fundamental need for organizations that it's puzzling why it's not built-in.
+
+The workaround using SES + Lambda works well, but it does feel like we're engineering around a missing feature. Perhaps there are business reasons since WorkMail's per-user pricing model might make catch-all less attractive from AWS's perspective.
+
+That said, this serverless approach has some advantages over traditional catch-all implementations. You get a complete audit trail in S3, flexible header rewriting to prevent delivery issues, and easy modification of forwarding logic without touching mail server configs.
+
+While it requires a bit of setup, once running it's been reliable and maintenance-free. The combination of AWS services creates a robust solution that handles MIME complexity better than simple forwarding rules.
+
+Hopefully this helps other organizations bridge the gap until AWS adds native catch-all support. If you find this useful or have improvements, contributions are welcome!
 
 ---
 
